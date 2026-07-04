@@ -125,27 +125,47 @@ function Invoke-Analyze {
   $env:_NT_SYMBOL_PATH = $Symbols
 
   if ($Debugger.Kind -eq 'cdb') {
-    # cdb prints to stdout; qd quits without saving a workspace.
+    # cdb prints to stdout, exits cleanly on qd -> a plain wait is enough.
     $cmds = '!analyze -v; qd'
     Write-Info ("running cdb !analyze -v (symbol download can take minutes)...")
     $p = Start-Process -FilePath $Debugger.Path `
       -ArgumentList @('-z', ('"' + $Dump + '"'), '-c', ('"' + $cmds + '"')) `
       -RedirectStandardOutput $LogFile -NoNewWindow -PassThru
-  } else {
-    # WinDbgX is a UI app but honors -c; .logopen captures the session.
-    $cmds = '.logopen ' + $LogFile + '; !analyze -v; .logclose; qd'
-    Write-Info ("running WinDbgX !analyze -v (a window opens and closes itself; symbol download can take minutes)...")
-    $p = Start-Process -FilePath $Debugger.Path `
-      -ArgumentList @('-z', ('"' + $Dump + '"'), '-c', ('"' + $cmds + '"')) -PassThru
+    if (-not $p.WaitForExit($TimeoutMin * 60 * 1000)) {
+      Write-Warn2 ("cdb still running after " + $TimeoutMin + " min - killing it. Re-run with -TimeoutMinutes 30 for big dumps.")
+      try { $p.Kill() } catch {}
+    }
+    return
   }
 
-  if (-not $p.WaitForExit($TimeoutMin * 60 * 1000)) {
-    Write-Warn2 ("debugger still running after " + $TimeoutMin + " min - killing it. Re-run with -TimeoutMinutes 30 for big dumps.")
-    try { $p.Kill() } catch {}
+  # WinDbgX (modern WinDbg) honors -c, but 'qd' does NOT reliably close the UI
+  # (DbgX.Shell stays open). So: detect completion by the '.logclose' marker in
+  # the log, then close the DbgX.Shell instance(s) we spawned - not by exit code.
+  $before = @()
+  Get-Process -Name 'DbgX.Shell' -ErrorAction SilentlyContinue | ForEach-Object { $before += $_.Id }
+  $cmds = '.logopen ' + $LogFile + '; !analyze -v; .logclose; qd'
+  Write-Info ("running WinDbgX !analyze -v (a window opens; it is closed automatically when done; symbol download can take minutes)...")
+  $p = Start-Process -FilePath $Debugger.Path `
+    -ArgumentList @('-z', ('"' + $Dump + '"'), '-c', ('"' + $cmds + '"')) -PassThru
+
+  $deadline = (Get-Date).AddMinutes($TimeoutMin)
+  $done = $false
+  while ((Get-Date) -lt $deadline) {
+    if ($p.HasExited) { $done = $true; break }
+    if (Test-Path $LogFile) {
+      $raw = Get-Content $LogFile -Raw -ErrorAction SilentlyContinue
+      if ($raw -and $raw -match 'Closing open log file') { $done = $true; break }
+    }
+    Start-Sleep -Seconds 5
   }
-  # WinDbgX sometimes exits before the log is flushed; give it a moment.
-  $tries = 0
-  while (-not (Test-Path $LogFile) -and $tries -lt 10) { Start-Sleep -Seconds 1; $tries++ }
+  if (-not $done) {
+    Write-Warn2 ("no complete log after " + $TimeoutMin + " min - killing the debugger. Re-run with -TimeoutMinutes 30 for big dumps.")
+  }
+  # Close every DbgX.Shell we spawned (the -z window does not close itself).
+  Get-Process -Name 'DbgX.Shell' -ErrorAction SilentlyContinue | ForEach-Object {
+    if ($before -notcontains $_.Id) { try { $_.Kill() } catch {} }
+  }
+  if (-not $p.HasExited) { try { $p.Kill() } catch {} }
 }
 
 function Parse-Analysis {
