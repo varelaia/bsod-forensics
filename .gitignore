@@ -1,0 +1,9 @@
+# Windows debris
+Thumbs.db
+Desktop.ini
+*.DMP
+*.dmp
+
+# test scratch
+/tmp/
+*.log
