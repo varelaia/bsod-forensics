@@ -1,5 +1,9 @@
 <p align="center"><img src="assets/banner.svg" alt="bsod-forensics — Varela Insights" width="100%"></p>
-<p align="center">![Windows](https://img.shields.io/badge/windows-WinDbg%20%C2%B7%20PowerShell-0a0e1a?style=flat-square) ![MIT](https://img.shields.io/badge/license-MIT-22c55e?style=flat-square) [![Varela Insights](https://img.shields.io/badge/by-Varela%20Insights-6aa0ff?style=flat-square)](https://www.varelainsights.com/)</p>
+<p align="center">
+  <img src="https://img.shields.io/badge/windows-WinDbg%20%C2%B7%20PowerShell-0a0e1a?style=flat-square" alt="Windows">
+  <img src="https://img.shields.io/badge/license-MIT-22c55e?style=flat-square" alt="MIT">
+  <a href="https://www.varelainsights.com/"><img src="https://img.shields.io/badge/by-Varela%20Insights-6aa0ff?style=flat-square" alt="Varela Insights"></a>
+</p>
 
 # bsod-forensics
 
